@@ -6,6 +6,9 @@ MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POS", "POS.csproj", "{E347DC40-6070-4AAE-823A-0FDC9DEBD7B4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "POS.Tests", "POS.Tests\POS.Tests.csproj", "{34E89A62-7789-43C2-B399-523987598932}"
+	ProjectSection(ProjectDependencies) = postProject
+		{E347DC40-6070-4AAE-823A-0FDC9DEBD7B4} = {E347DC40-6070-4AAE-823A-0FDC9DEBD7B4}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
