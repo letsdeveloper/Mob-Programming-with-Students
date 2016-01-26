@@ -1,8 +1,6 @@
-﻿
-using System;
+﻿using System;
 using System.IO;
-using System.Text;
-using System.Threading;
+using System.Linq;
 using NUnit.Framework;
 
 namespace POS.Tests
@@ -10,7 +8,7 @@ namespace POS.Tests
     [TestFixture]
     internal class Test
     {
-        Register uut;
+        private Register uut;
         private TextWriter textWriter;
 
         [SetUp]
@@ -24,26 +22,30 @@ namespace POS.Tests
         public void SuccessfulInput()
         {
             uut.Add("1", 100);
-            Assert.AreEqual("1,00 €", uut.Scan("1"));
+            uut.Scan("1");
+            AssertLastLineEquals("1,00 €");
         }
 
         [Test]
         public void UnsuccessfulInput()
         {
-            Assert.AreEqual("Barcode not found : \"fail\"", uut.Scan("fail"));
+            uut.Scan("fail");
+            AssertLastLineEquals("Barcode not found : \"fail\"");
         }
 
         [Test]
         public void BarcodeReadError()
         {
-            Assert.AreEqual("Read Failure",uut.Scan(""));
+            uut.Scan("");
+            AssertLastLineEquals("Read Failure");
         }
 
         [Test]
         public void LessThanOneEuro()
         {
             uut.Add("50003", 2);
-            Assert.AreEqual("0,02 €", uut.Scan("50003"));
+            uut.Scan("50003");
+            AssertLastLineEquals("0,02 €");
         }
 
         [Test]
@@ -53,9 +55,12 @@ namespace POS.Tests
             uut.Add("50003", 2);
             uut.Add("0055", 150);
 
-            Assert.AreEqual("20,00 €", uut.Scan("2056"));
-            Assert.AreEqual("0,02 €", uut.Scan("50003"));
-            Assert.AreEqual("1,50 €", uut.Scan("0055"));
+            uut.Scan("2056");
+            AssertLastLineEquals("20,00 €");
+            uut.Scan("50003");
+            AssertLastLineEquals("0,02 €");
+            uut.Scan("0055");
+            AssertLastLineEquals("1,50 €");
         }
 
         [Test]
@@ -63,7 +68,8 @@ namespace POS.Tests
         {
             uut.Add("2056", 2000);
             uut.Scan("2056");
-            Assert.AreEqual("20,00 €", uut.Total());
+            uut.Total();
+            AssertLastLineEquals("Total: 20,00 €");
         }
 
         [Test]
@@ -73,8 +79,8 @@ namespace POS.Tests
             uut.Add("0055", 150);
             uut.Scan("2056");
             uut.Scan("0055");
-            uut.Scan("0055");
-            Assert.AreEqual("23,00 €", uut.Total());
+            uut.Total();
+            AssertLastLineEquals("Total: 21,50 €");
         }
 
         [Test]
@@ -82,19 +88,24 @@ namespace POS.Tests
         {
             uut.Add("2056", 2000);
             uut.Scan("2056");
-            Assert.AreEqual("20,00 €", uut.Total());
-            Assert.AreEqual("0,00 €", uut.Total());
+
+            uut.Total();
+            AssertLastLineEquals("Total: 20,00 €");
+            uut.Total();
+            AssertLastLineEquals("Total: 0,00 €");
         }
 
         [Test]
         public void MultipleTotals()
         {
             uut.Add("2056", 2000);
+            uut.Add("2057", 4000);
             uut.Scan("2056");
-            Assert.AreEqual("20,00 €", uut.Total());
-            uut.Scan("2056");
-            uut.Scan("2056");
-            Assert.AreEqual("40,00 €", uut.Total());
+            uut.Total();
+            AssertLastLineEquals("Total: 20,00 €");
+            uut.Scan("2057");
+            uut.Total();
+            AssertLastLineEquals("Total: 40,00 €");
         }
 
         [Test]
@@ -106,56 +117,92 @@ namespace POS.Tests
             uut.Scan("0055");
             uut.Scan("");
             uut.Scan("1337");
-            uut.Scan("0055");
-            Assert.AreEqual("23,00 €", uut.Total());
-        }
-
-        [Test]
-        public void LiveOutputOnScan()
-        {
-            uut.Add("2056", 2000);
-            uut.Scan("2056");
-            Assert.AreEqual("20,00 €" + Environment.NewLine, textWriter.ToString());
-        }
-
-        [Test]
-        public void LiveOutputOnTotal()
-        {
             uut.Total();
-            Assert.AreEqual("Total: 0,00 €" + Environment.NewLine
-                , textWriter.ToString());
+            AssertLastLineEquals("Total: 21,50 €");
         }
 
         [Test]
-        public void LiveOutputOnScanFailure()
+        public void DiscountForSecondItem()
         {
-            uut.Scan("");
-            Assert.AreEqual("Read Failure" + Environment.NewLine, textWriter.ToString());
+            uut.Add("1", 1000);
+            uut.Scan("1");
+            uut.Scan("1");
+            AssertLastLineEquals("5,00 €");
         }
 
         [Test]
-        public void LiveOutputOnBarcodeNotFound()
+        public void DiscountForThirdItem()
         {
-            uut.Scan("uiae");
-            Assert.AreEqual("Barcode not found : \"uiae\"" + Environment.NewLine, textWriter.ToString());
+            uut.Add("1", 1000);
+            uut.Scan("1");
+            uut.Scan("1");
+            uut.Scan("1");
+            AssertLastLineEquals("5,00 €");
         }
 
         [Test]
-        public void LiveOutputWithMultipleScansAndTotal()
+        public void NoDiscountForSingleItem()
         {
-            uut.Add("2056", 2000);
-            uut.Scan("2056");
-            uut.Scan("2056");
+            uut.Add("1", 1000);
+            uut.Add("2", 1000);
+            uut.Scan("1");
+            uut.Scan("1");
+            uut.Scan("2");
+            AssertLastLineEquals("10,00 €");
+        }
+
+        [Test]
+        public void NoDiscountAfterTotal()
+        {
+            uut.Add("1", 1000);
+            uut.Scan("1");
             uut.Total();
-            uut.Scan("");
-            uut.Scan("qwerf");
-            var sb = new StringBuilder();
-            sb.AppendLine("20,00 €");
-            sb.AppendLine("20,00 €");
-            sb.AppendLine("Total: 40,00 €");
-            sb.AppendLine("Read Failure");
-            sb.AppendLine("Barcode not found : \"qwerf\"");
-            Assert.AreEqual(sb.ToString(), textWriter.ToString());
+            uut.Scan("1");
+            AssertLastLineEquals("10,00 €");
+        }
+
+        [Test]
+        public void BuyOneGetOneFree()
+        {
+            uut.Add("1", 1000, true);
+            uut.Scan("1");
+            uut.Scan("1");
+            AssertLastLineEquals("0,00 €");
+        }
+
+        [Test]
+        public void BuyOneGetOneFreeThirdTime()
+        {
+            uut.Add("1", 1000, true);
+            uut.Scan("1");
+            uut.Scan("1");
+            uut.Scan("1");
+            AssertLastLineNotEquals("0,00 €");
+        }        
+        
+        [Test]
+        public void BuyOneGetOneFreeFourthTime()
+        {
+            uut.Add("1", 1000, true);
+            uut.Scan("1");
+            uut.Scan("1");
+            uut.Scan("1");
+            uut.Scan("1");
+            AssertLastLineEquals("0,00 €");
+        }
+
+        private void AssertLastLineNotEquals(string expected)
+        {
+            String[] newLineSeparator = { Environment.NewLine };
+            Assert.AreNotEqual(expected,
+                textWriter.ToString().Split(newLineSeparator, StringSplitOptions.RemoveEmptyEntries).Last());
+        }
+
+        private void AssertLastLineEquals(string expected)
+        {
+            String[] newLineSeparator = {Environment.NewLine};
+            Assert.AreEqual(expected,
+                textWriter.ToString().Split(newLineSeparator, StringSplitOptions.RemoveEmptyEntries).Last());
         }
     }
 }
